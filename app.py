@@ -7,16 +7,27 @@ from threading import Thread
 import queue
 import time
 import itertools
-from multiprocessing import Process, Queue, cpu_count
-import ctypes
+import os
 
 app = Flask(__name__)
+
+# Vercel için multiprocessing desteğini kontrol et
+IS_VERCEL = os.environ.get('VERCEL')
+
+if IS_VERCEL:
+    # Vercel ortamında multiprocessing yerine threading kullan
+    from threading import Thread as Process
+    from queue import Queue as MultiQueue
+    cpu_count = lambda: 4  # Sabit process sayısı
+else:
+    # Local ortamda normal multiprocessing
+    from multiprocessing import Process, Queue as MultiQueue, cpu_count
 
 # Global değişkenler
 progress_queue = queue.Queue()
 current_password = None
 is_cracking = False
-multi_progress_queue = Queue()
+multi_progress_queue = MultiQueue()
 multi_should_stop = None
 
 def generate_password():
