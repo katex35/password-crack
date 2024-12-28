@@ -8,6 +8,7 @@ import queue
 import time
 import itertools
 import os
+import ctypes
 
 app = Flask(__name__)
 
@@ -28,7 +29,7 @@ progress_queue = queue.Queue()
 current_password = None
 is_cracking = False
 multi_progress_queue = MultiQueue()
-multi_should_stop = None
+multi_should_stop = False
 
 def generate_password():
     password = "".join(
@@ -144,7 +145,7 @@ def process_chunk(process_id, target_hash, length, progress_queue, should_stop):
 
 def multi_brute_force(target_hash, max_length=5):
     global multi_should_stop
-    multi_should_stop = ctypes.c_bool(False)
+    multi_should_stop = False
     num_processes = cpu_count()
     
     for length in range(1, max_length + 1):
@@ -190,13 +191,6 @@ def get_password():
         "hash": hashed_password,
         "real": real_password
     }
-    
-    # password.json dosyasını güncelle
-    with open("password.json", "w") as f:
-        json.dump({
-            "password": hashed_password,
-            "real_password": real_password
-        }, f)
     
     return jsonify({
         "password": hashed_password,
