@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MD5 Brute Force</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .password-info {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .console {
+            background-color: #1e1e1e;
+            color: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .success { color: #4caf50; }
+        .info { color: #2196f3; }
+        .error { color: #f44336; }
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #stopButton {
+            background-color: #f44336;
+        }
+        .process-consoles {
+            margin: 20px 0;
+        }
+        
+        .console-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .process-console {
+            background-color: #1e1e1e;
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .process-title {
+            background-color: #333;
+            padding: 5px;
+            margin: -10px -10px 5px -10px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        
+        .progress-bar {
+            background-color: #2d2d2d;
+            height: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        
+        .progress-fill {
+            background-color: #4caf50;
+            height: 100%;
+            border-radius: 5px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .process-console.found {
+            animation: highlight 1s infinite;
+        }
+        
+        @keyframes highlight {
+            0% { box-shadow: 0 0 5px #4caf50; }
+            50% { box-shadow: 0 0 20px #4caf50; }
+            100% { box-shadow: 0 0 5px #4caf50; }
+        }
+        
+        .success.highlight {
+            font-size: 1.2em;
+            font-weight: bold;
+            text-shadow: 0 0 10px #4caf50;
+            animation: text-highlight 1s infinite;
+        }
+        
+        @keyframes text-highlight {
+            0% { color: #4caf50; }
+            50% { color: #fff; }
+            100% { color: #4caf50; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MD5 Brute Force</h1>
+        
+        <button id="generateBtn">Yeni Şifre Oluştur</button>
+        <button id="startBtn" disabled>Brute Force Başlat</button>
+        <button id="stopBtn" disabled>Durdur</button>
+        <button id="startMultiBtn" disabled>Multi-Process Başlat</button>
+        <button id="stopMultiBtn" disabled>Multi-Process Durdur</button>
+        
+        <div id="passwordInfo" class="password-info" style="display: none;">
+            <h3>Oluşturulan Şifre:</h3>
+            <p><strong>Hash:</strong> <span id="hash"></span></p>
+            <p><strong>Gerçek Şifre:</strong> <span id="realPassword"></span></p>
+        </div>
+        
+        <div class="console" id="console"></div>
+        
+        <div id="processConsoles" class="process-consoles" style="display: none;">
+            <h3>Process İlerlemeleri</h3>
+            <div class="console-grid" id="consoleGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        let isRunning = false;
+        let isMultiRunning = false;
+
+        function appendToConsole(message, type = 'info') {
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = message;
+            consoleDiv.appendChild(line);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        document.getElementById('generateBtn').addEventListener('click', async () => {
+            const response = await fetch('/get_password');
+            const data = await response.json();
+            
+            document.getElementById('hash').textContent = data.password;
+            document.getElementById('realPassword').textContent = data.real_password;
+            document.getElementById('passwordInfo').style.display = 'block';
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('startMultiBtn').disabled = false;
+            document.getElementById('stopMultiBtn').disabled = true;
+            
+            consoleDiv.innerHTML = '';
+            appendToConsole('Yeni şifre oluşturuldu', 'info');
+        });
+
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            const response = await fetch('/start_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                isRunning = true;
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('generateBtn').disabled = true;
+                document.getElementById('startMultiBtn').disabled = true;
+                document.getElementById('stopMultiBtn').disabled = true;
+                pollProgress();
+            }
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', async () => {
+            const response = await fetch('/stop_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                isRunning = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('generateBtn').disabled = false;
+                document.getElementById('startMultiBtn').disabled = false;
+                document.getElementById('stopMultiBtn').disabled = true;
+                appendToConsole('İşlem durduruldu', 'error');
+            }
+        });
+
+        async function pollProgress() {
+            while (isRunning) {
+                const response = await fetch('/get_progress');
+                const messages = await response.json();
+                
+                for (const msg of messages) {
+                    appendToConsole(msg.message, msg.type);
+                    if (msg.type === 'success') {
+                        isRunning = false;
+                        document.getElementById('startBtn').disabled = false;
+                        document.getElementById('stopBtn').disabled = true;
+                        document.getElementById('generateBtn').disabled = false;
+                        document.getElementById('startMultiBtn').disabled = false;
+                        document.getElementById('stopMultiBtn').disabled = true;
+                    }
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        function createProcessConsoles(numProcesses) {
+            const grid = document.getElementById('consoleGrid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < numProcesses; i++) {
+                const consoleDiv = document.createElement('div');
+                consoleDiv.className = 'process-console';
+                consoleDiv.id = `process-${i}`;
+                consoleDiv.innerHTML = `
+                    <div class="process-title">Process ${i}</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-${i}"></div>
+                    </div>
+                    <div class="messages" id="messages-${i}"></div>
+                `;
+                grid.appendChild(consoleDiv);
+            }
+            
+            document.getElementById('processConsoles').style.display = 'block';
+        }
+
+        function updateProcessConsole(processId, message, progress = null) {
+            const messagesDiv = document.getElementById(`messages-${processId}`);
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            
+            if (message.includes('şifreyi buldu')) {
+                const processConsole = document.getElementById(`process-${processId}`);
+                processConsole.classList.add('found');
+                messageDiv.classList.add('success', 'highlight');
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            if (progress !== null) {
+                const progressBar = document.getElementById(`progress-${processId}`);
+                progressBar.style.width = `${progress}%`;
+            }
+        }
+
+        document.getElementById('startMultiBtn').addEventListener('click', async () => {
+            const response = await fetch('/start_multi_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                isMultiRunning = true;
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('startMultiBtn').disabled = true;
+                document.getElementById('stopMultiBtn').disabled = false;
+                document.getElementById('generateBtn').disabled = true;
+                
+                createProcessConsoles(navigator.hardwareConcurrency);
+                pollMultiProgress();
+            }
+        });
+
+        document.getElementById('stopMultiBtn').addEventListener('click', async () => {
+            const response = await fetch('/stop_multi_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                isMultiRunning = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('startMultiBtn').disabled = false;
+                document.getElementById('stopMultiBtn').disabled = true;
+                document.getElementById('generateBtn').disabled = false;
+                appendToConsole('Multi-Process işlem durduruldu', 'error');
+            }
+        });
+
+        async function pollMultiProgress() {
+            while (isMultiRunning) {
+                const response = await fetch('/get_multi_progress');
+                const messages = await response.json();
+                
+                for (const msg of messages) {
+                    if (msg.type === 'progress') {
+                        const match = msg.message.match(/Process (\d+): %(\d+)/);
+                        if (match) {
+                            const processId = parseInt(match[1]);
+                            const progress = parseInt(match[2]);
+                            updateProcessConsole(processId, msg.message, progress);
+                        }
+                    } else {
+                        appendToConsole(msg.message, msg.type);
+                        
+                        if (msg.type === 'success' && msg.processId !== undefined) {
+                            updateProcessConsole(msg.processId, msg.message);
+                        }
+                        
+                        if (msg.type === 'success') {
+                            isMultiRunning = false;
+                            document.getElementById('startBtn').disabled = false;
+                            document.getElementById('startMultiBtn').disabled = false;
+                            document.getElementById('stopMultiBtn').disabled = true;
+                            document.getElementById('generateBtn').disabled = false;
+                        }
+                    }
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+    </script>
+</body>
+</html> 
