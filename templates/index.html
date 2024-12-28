@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MD5 Brute Force</title>
+    
+    <!-- ===== STYLES ===== -->
     <style>
+        /* Genel Stiller */
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -12,6 +15,8 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+        
+        /* Container ve Konsol Stilleri */
         .container {
             background-color: white;
             padding: 20px;
@@ -34,9 +39,8 @@
             font-family: monospace;
             margin: 10px 0;
         }
-        .success { color: #4caf50; }
-        .info { color: #2196f3; }
-        .error { color: #f44336; }
+        
+        /* Buton Stilleri */
         button {
             background-color: #4caf50;
             color: white;
@@ -50,16 +54,15 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        #stopButton {
-            background-color: #f44336;
-        }
+        
+        /* Process/Worker/Thread Konsol Stilleri */
         .process-consoles {
             margin: 20px 0;
         }
         
         .console-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-top: 10px;
         }
@@ -69,9 +72,9 @@
             color: #fff;
             padding: 10px;
             border-radius: 4px;
-            height: 150px;
+            height: 120px;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 11px;
             display: flex;
             flex-direction: column;
         }
@@ -97,6 +100,7 @@
             transition: width 0.3s ease;
         }
         
+        /* Animasyon ve Efekt Stilleri */
         .process-console.found {
             animation: highlight 1s infinite;
         }
@@ -126,37 +130,91 @@
             word-wrap: break-word;
             scroll-behavior: smooth;
         }
+        
+        @media (min-width: 1200px) {
+            .console-grid.large {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        /* Çözüm Tipine Özel Buton Renkleri */
+        #startMultiBtn { background-color: #2196f3; }
+        #stopMultiBtn { background-color: #1976d2; }
+        
+        #startAsyncBtn { background-color: #9c27b0; }
+        #stopAsyncBtn { background-color: #7b1fa2; }
+        
+        #startThreadBtn { background-color: #ff9800; }
+        #stopThreadBtn { background-color: #f57c00; }
+        
+        /* Çözüm Tipine Özel Konsol Stilleri */
+        .worker-console { background-color: #1a1a1a; }
+        .thread-console { background-color: #1c1c1c; }
     </style>
 </head>
 <body>
+    <!-- ===== HTML YAPISI ===== -->
     <div class="container">
         <h1>MD5 Brute Force</h1>
         
-        <button id="generateBtn">Yeni Şifre Oluştur</button>
-        <button id="startBtn" disabled>Brute Force Başlat</button>
-        <button id="stopBtn" disabled>Durdur</button>
-        <button id="startMultiBtn" disabled>Multi-Process Başlat</button>
-        <button id="stopMultiBtn" disabled>Multi-Process Durdur</button>
+        <!-- Kontrol Butonları -->
+        <div class="controls">
+            <button id="generateBtn">Yeni Şifre Oluştur</button>
+            
+            <!-- Normal Brute Force -->
+            <button id="startBtn" disabled>Brute Force Başlat</button>
+            <button id="stopBtn" disabled>Durdur</button>
+            
+            <!-- Multi-Process -->
+            <button id="startMultiBtn" disabled>Multi-Process Başlat</button>
+            <button id="stopMultiBtn" disabled>Multi-Process Durdur</button>
+            
+            <!-- Async -->
+            <button id="startAsyncBtn" disabled>Async Başlat</button>
+            <button id="stopAsyncBtn" disabled>Async Durdur</button>
+            
+            <!-- Thread -->
+            <button id="startThreadBtn" disabled>Thread Başlat</button>
+            <button id="stopThreadBtn" disabled>Thread Durdur</button>
+        </div>
         
+        <!-- Şifre Bilgileri -->
         <div id="passwordInfo" class="password-info" style="display: none;">
             <h3>Oluşturulan Şifre:</h3>
             <p><strong>Hash:</strong> <span id="hash"></span></p>
             <p><strong>Gerçek Şifre:</strong> <span id="realPassword"></span></p>
         </div>
         
+        <!-- Ana Konsol -->
         <div class="console" id="console"></div>
         
+        <!-- Çözüm Konsolları -->
         <div id="processConsoles" class="process-consoles" style="display: none;">
             <h3>Process İlerlemeleri</h3>
             <div class="console-grid" id="consoleGrid"></div>
         </div>
+        
+        <div id="asyncConsoles" class="process-consoles" style="display: none;">
+            <h3>Async Worker İlerlemeleri</h3>
+            <div class="console-grid" id="asyncGrid"></div>
+        </div>
+        
+        <div id="threadConsoles" class="process-consoles" style="display: none;">
+            <h3>Thread İlerlemeleri</h3>
+            <div class="console-grid" id="threadGrid"></div>
+        </div>
     </div>
 
+    <!-- ===== SCRIPTS ===== -->
     <script>
+        // ===== GLOBAL DEĞİŞKENLER =====
         const consoleDiv = document.getElementById('console');
         let isRunning = false;
         let isMultiRunning = false;
-
+        let isAsyncRunning = false;
+        let isThreadRunning = false;
+        
+        // ===== YARDIMCI FONKSİYONLAR =====
         function appendToConsole(message, type = 'info') {
             const line = document.createElement('div');
             line.className = type;
@@ -164,23 +222,309 @@
             consoleDiv.appendChild(line);
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
+        
+        // ===== KONSOL OLUŞTURMA FONKSİYONLARI =====
+        function createProcessConsoles(numProcesses) {
+            const grid = document.getElementById('consoleGrid');
+            grid.innerHTML = '';
+            
+            const totalProcesses = 12;
+            
+            for (let i = 0; i < totalProcesses; i++) {
+                const consoleDiv = document.createElement('div');
+                consoleDiv.className = 'process-console';
+                consoleDiv.id = `process-${i}`;
+                consoleDiv.innerHTML = `
+                    <div class="process-title">Process ${i}</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-${i}"></div>
+                    </div>
+                    <div class="messages" id="messages-${i}"></div>
+                `;
+                grid.appendChild(consoleDiv);
+            }
+            
+            document.getElementById('processConsoles').style.display = 'block';
+        }
 
+        function createAsyncConsoles(numWorkers) {
+            const grid = document.getElementById('asyncGrid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < numWorkers; i++) {
+                const consoleDiv = document.createElement('div');
+                consoleDiv.className = 'process-console worker-console';
+                consoleDiv.id = `worker-${i}`;
+                consoleDiv.innerHTML = `
+                    <div class="process-title">Worker ${i}</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="worker-progress-${i}"></div>
+                    </div>
+                    <div class="messages" id="worker-messages-${i}"></div>
+                `;
+                grid.appendChild(consoleDiv);
+            }
+            
+            document.getElementById('asyncConsoles').style.display = 'block';
+        }
+
+        function createThreadConsoles(numThreads) {
+            const grid = document.getElementById('threadGrid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < numThreads; i++) {
+                const consoleDiv = document.createElement('div');
+                consoleDiv.className = 'process-console thread-console';
+                consoleDiv.id = `thread-${i}`;
+                consoleDiv.innerHTML = `
+                    <div class="process-title">Thread ${i}</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="thread-progress-${i}"></div>
+                    </div>
+                    <div class="messages" id="thread-messages-${i}"></div>
+                `;
+                grid.appendChild(consoleDiv);
+            }
+            
+            document.getElementById('threadConsoles').style.display = 'block';
+        }
+        
+        // ===== KONSOL GÜNCELLEME FONKSİYONLARI =====
+        function updateProcessConsole(processId, message, progress = null) {
+            const messagesDiv = document.getElementById(`messages-${processId}`);
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            
+            if (message.includes('şifreyi buldu')) {
+                const processConsole = document.getElementById(`process-${processId}`);
+                processConsole.classList.add('found');
+                messageDiv.classList.add('success', 'highlight');
+            }
+            
+            messagesDiv.innerHTML = '';
+            messagesDiv.appendChild(messageDiv);
+            
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            if (progress !== null) {
+                const progressBar = document.getElementById(`progress-${processId}`);
+                progressBar.style.width = `${progress}%`;
+            }
+        }
+
+        function updateWorkerConsole(workerId, message, progress = null) {
+            const messagesDiv = document.getElementById(`worker-messages-${workerId}`);
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            
+            if (message.includes('buldu')) {
+                const workerConsole = document.getElementById(`worker-${workerId}`);
+                workerConsole.classList.add('found');
+                messageDiv.classList.add('success', 'highlight');
+            }
+            
+            messagesDiv.innerHTML = '';
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            if (progress !== null) {
+                const progressBar = document.getElementById(`worker-progress-${workerId}`);
+                progressBar.style.width = `${progress}%`;
+            }
+        }
+
+        function updateThreadConsole(threadId, message, progress = null) {
+            const messagesDiv = document.getElementById(`thread-messages-${threadId}`);
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            
+            if (message.includes('buldu')) {
+                const threadConsole = document.getElementById(`thread-${threadId}`);
+                threadConsole.classList.add('found');
+                messageDiv.classList.add('success', 'highlight');
+            }
+            
+            messagesDiv.innerHTML = '';
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            if (progress !== null) {
+                const progressBar = document.getElementById(`thread-progress-${threadId}`);
+                progressBar.style.width = `${progress}%`;
+            }
+        }
+        
+        // ===== POLLING FONKSİYONLARI =====
+        async function pollProgress() {
+            while (isRunning) {
+                const response = await fetch('/get_progress');
+                const messages = await response.json();
+                
+                for (const msg of messages) {
+                    appendToConsole(msg.message, msg.type);
+                    if (msg.type === 'success') {
+                        isRunning = false;
+                        document.getElementById('startBtn').disabled = false;
+                        document.getElementById('stopBtn').disabled = true;
+                        document.getElementById('generateBtn').disabled = false;
+                        document.getElementById('startMultiBtn').disabled = false;
+                        document.getElementById('stopMultiBtn').disabled = true;
+                    }
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        async function pollMultiProgress() {
+            while (isMultiRunning) {
+                try {
+                    const response = await fetch('/get_multi_progress');
+                    const messages = await response.json();
+                    
+                    for (const msg of messages) {
+                        if (msg.type === 'progress') {
+                            const match = msg.message.match(/Process (\d+): %(\d+)/);
+                            if (match) {
+                                const processId = parseInt(match[1]);
+                                const progress = parseInt(match[2]);
+                                updateProcessConsole(processId, msg.message, progress);
+                            } else {
+                                updateProcessConsole(msg.processId, msg.message);
+                            }
+                        } else {
+                            appendToConsole(msg.message, msg.type);
+                            
+                            if (msg.type === 'success' && msg.processId !== undefined) {
+                                updateProcessConsole(msg.processId, msg.message);
+                                isMultiRunning = false;
+                                document.getElementById('startBtn').disabled = false;
+                                document.getElementById('startMultiBtn').disabled = false;
+                                document.getElementById('stopMultiBtn').disabled = true;
+                                document.getElementById('generateBtn').disabled = false;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    isMultiRunning = false;
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('startMultiBtn').disabled = false;
+                    document.getElementById('stopMultiBtn').disabled = true;
+                    document.getElementById('generateBtn').disabled = false;
+                }
+                
+                if (isMultiRunning) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+        }
+
+        async function pollAsyncProgress() {
+            while (isAsyncRunning) {
+                try {
+                    const response = await fetch('/get_async_progress');
+                    const messages = await response.json();
+                    
+                    for (const msg of messages) {
+                        if (msg.type === 'progress') {
+                            const workerId = msg.workerId;
+                            const progress = msg.progress;
+                            updateWorkerConsole(workerId, msg.message, progress);
+                        } else {
+                            appendToConsole(msg.message, msg.type);
+                            
+                            if (msg.type === 'success') {
+                                isAsyncRunning = false;
+                                document.getElementById('startBtn').disabled = false;
+                                document.getElementById('startMultiBtn').disabled = false;
+                                document.getElementById('startAsyncBtn').disabled = false;
+                                document.getElementById('stopAsyncBtn').disabled = true;
+                                document.getElementById('generateBtn').disabled = false;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Async polling error:', error);
+                    isAsyncRunning = false;
+                }
+                
+                if (isAsyncRunning) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+        }
+
+        async function pollThreadProgress() {
+            while (isThreadRunning) {
+                try {
+                    const response = await fetch('/get_thread_progress');
+                    const messages = await response.json();
+                    
+                    for (const msg of messages) {
+                        if (msg.type === 'progress') {
+                            const threadId = msg.threadId;
+                            const progress = msg.progress;
+                            updateThreadConsole(threadId, msg.message, progress);
+                        } else {
+                            appendToConsole(msg.message, msg.type);
+                            
+                            if (msg.type === 'success') {
+                                isThreadRunning = false;
+                                document.getElementById('startBtn').disabled = false;
+                                document.getElementById('startMultiBtn').disabled = false;
+                                document.getElementById('startAsyncBtn').disabled = false;
+                                document.getElementById('startThreadBtn').disabled = false;
+                                document.getElementById('stopThreadBtn').disabled = true;
+                                document.getElementById('generateBtn').disabled = false;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Thread polling error:', error);
+                    isThreadRunning = false;
+                }
+                
+                if (isThreadRunning) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+        }
+        
+        // ===== EVENT LISTENERS =====
+        // Şifre Oluşturma
         document.getElementById('generateBtn').addEventListener('click', async () => {
             const response = await fetch('/get_password');
             const data = await response.json();
             
+            document.getElementById('processConsoles').style.display = 'none';
+            document.getElementById('asyncConsoles').style.display = 'none';
+            document.getElementById('threadConsoles').style.display = 'none';
+            
             document.getElementById('hash').textContent = data.password;
             document.getElementById('realPassword').textContent = data.real_password;
+            document.getElementById('passwordInfo').innerHTML = `
+                <h3>Oluşturulan Şifre:</h3>
+                <p><strong>Hash:</strong> <span id="hash">${data.password}</span></p>
+                <p><strong>Gerçek Şifre:</strong> <span id="realPassword">${data.real_password}</span></p>
+                <p><strong>Şifre Uzunluğu:</strong> ${data.length} karakter</p>
+                <p><small>Çözücüler ${data.min_length} ile ${data.max_length} karakter arası şifreleri deneyecek</small></p>
+            `;
             document.getElementById('passwordInfo').style.display = 'block';
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
             document.getElementById('startMultiBtn').disabled = false;
             document.getElementById('stopMultiBtn').disabled = true;
+            document.getElementById('startAsyncBtn').disabled = false;
+            document.getElementById('stopAsyncBtn').disabled = true;
+            document.getElementById('startThreadBtn').disabled = false;
+            document.getElementById('stopThreadBtn').disabled = true;
             
             consoleDiv.innerHTML = '';
             appendToConsole('Yeni şifre oluşturuldu', 'info');
         });
 
+        // Normal Brute Force
         document.getElementById('startBtn').addEventListener('click', async () => {
             const response = await fetch('/start_crack', { method: 'POST' });
             const data = await response.json();
@@ -211,76 +555,17 @@
             }
         });
 
-        async function pollProgress() {
-            while (isRunning) {
-                const response = await fetch('/get_progress');
-                const messages = await response.json();
-                
-                for (const msg of messages) {
-                    appendToConsole(msg.message, msg.type);
-                    if (msg.type === 'success') {
-                        isRunning = false;
-                        document.getElementById('startBtn').disabled = false;
-                        document.getElementById('stopBtn').disabled = true;
-                        document.getElementById('generateBtn').disabled = false;
-                        document.getElementById('startMultiBtn').disabled = false;
-                        document.getElementById('stopMultiBtn').disabled = true;
-                    }
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-        }
-
-        function createProcessConsoles(numProcesses) {
-            const grid = document.getElementById('consoleGrid');
-            grid.innerHTML = '';
-            
-            for (let i = 0; i < numProcesses; i++) {
-                const consoleDiv = document.createElement('div');
-                consoleDiv.className = 'process-console';
-                consoleDiv.id = `process-${i}`;
-                consoleDiv.innerHTML = `
-                    <div class="process-title">Process ${i}</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-${i}"></div>
-                    </div>
-                    <div class="messages" id="messages-${i}"></div>
-                `;
-                grid.appendChild(consoleDiv);
-            }
-            
-            document.getElementById('processConsoles').style.display = 'block';
-        }
-
-        function updateProcessConsole(processId, message, progress = null) {
-            const messagesDiv = document.getElementById(`messages-${processId}`);
-            const messageDiv = document.createElement('div');
-            messageDiv.textContent = message;
-            
-            if (message.includes('şifreyi buldu')) {
-                const processConsole = document.getElementById(`process-${processId}`);
-                processConsole.classList.add('found');
-                messageDiv.classList.add('success', 'highlight');
-            }
-            
-            messagesDiv.innerHTML = '';
-            messagesDiv.appendChild(messageDiv);
-            
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            
-            if (progress !== null) {
-                const progressBar = document.getElementById(`progress-${processId}`);
-                progressBar.style.width = `${progress}%`;
-            }
-        }
-
+        // Multi-Process
         document.getElementById('startMultiBtn').addEventListener('click', async () => {
             const response = await fetch('/start_multi_crack', { method: 'POST' });
             const data = await response.json();
             
             if (data.status === 'success') {
+                document.getElementById('asyncConsoles').style.display = 'none';
+                document.getElementById('threadConsoles').style.display = 'none';
+                
                 document.getElementById('consoleGrid').innerHTML = '';
+                document.getElementById('processConsoles').style.display = 'block';
                 
                 isMultiRunning = true;
                 document.getElementById('startBtn').disabled = true;
@@ -288,7 +573,7 @@
                 document.getElementById('stopMultiBtn').disabled = false;
                 document.getElementById('generateBtn').disabled = true;
                 
-                createProcessConsoles(8);
+                createProcessConsoles(12);
                 pollMultiProgress();
             }
         });
@@ -304,68 +589,91 @@
                 document.getElementById('stopMultiBtn').disabled = true;
                 document.getElementById('generateBtn').disabled = false;
                 
-                setTimeout(() => {
-                    document.getElementById('processConsoles').style.display = 'none';
-                    document.getElementById('consoleGrid').innerHTML = '';
-                }, 1000);
-                
                 appendToConsole('Multi-Process işlem durduruldu', 'error');
             }
         });
 
-        async function pollMultiProgress() {
-            while (isMultiRunning) {
-                const response = await fetch('/get_multi_progress');
-                const messages = await response.json();
+        // Async
+        document.getElementById('startAsyncBtn').addEventListener('click', async () => {
+            const response = await fetch('/start_async_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                document.getElementById('processConsoles').style.display = 'none';
+                document.getElementById('threadConsoles').style.display = 'none';
                 
-                for (const msg of messages) {
-                    if (msg.type === 'progress') {
-                        const match = msg.message.match(/Process (\d+): %(\d+)/);
-                        if (match) {
-                            const processId = parseInt(match[1]);
-                            const progress = parseInt(match[2]);
-                            updateProcessConsole(processId, msg.message, progress);
-                        }
-                    } else {
-                        appendToConsole(msg.message, msg.type);
-                        
-                        if (msg.type === 'success' && msg.processId !== undefined) {
-                            updateProcessConsole(msg.processId, msg.message);
-                            isMultiRunning = false;
-                            document.getElementById('startBtn').disabled = false;
-                            document.getElementById('startMultiBtn').disabled = false;
-                            document.getElementById('stopMultiBtn').disabled = true;
-                            document.getElementById('generateBtn').disabled = false;
-                            
-                            setTimeout(() => {
-                                document.getElementById('processConsoles').style.display = 'none';
-                                document.getElementById('consoleGrid').innerHTML = '';
-                            }, 2000);
-                        }
-                    }
-                }
+                document.getElementById('asyncGrid').innerHTML = '';
+                document.getElementById('asyncConsoles').style.display = 'block';
                 
-                await new Promise(resolve => setTimeout(resolve, 100));
+                isAsyncRunning = true;
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('startMultiBtn').disabled = true;
+                document.getElementById('startAsyncBtn').disabled = true;
+                document.getElementById('stopAsyncBtn').disabled = false;
+                document.getElementById('generateBtn').disabled = true;
+                
+                createAsyncConsoles(12);
+                pollAsyncProgress();
             }
-        }
+        });
 
-        function updateTerminals(messages) {
-            messages.forEach(message => {
-                if (message.type === 'progress' && message.processId !== undefined) {
-                    // Process terminallerini güncelle
-                    const terminalId = `terminal${message.processId}`;
-                    const terminal = document.getElementById(terminalId);
-                    if (terminal) {
-                        terminal.innerHTML += message.message + '\n';
-                        terminal.scrollTop = terminal.scrollHeight; // Otomatik scroll
-                    }
-                } else {
-                    // Ana terminali güncelle
-                    mainTerminal.innerHTML += message.message + '\n';
-                    mainTerminal.scrollTop = mainTerminal.scrollHeight; // Otomatik scroll
-                }
-            });
-        }
+        document.getElementById('stopAsyncBtn').addEventListener('click', async () => {
+            const response = await fetch('/stop_async_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                isAsyncRunning = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('startMultiBtn').disabled = false;
+                document.getElementById('startAsyncBtn').disabled = false;
+                document.getElementById('stopAsyncBtn').disabled = true;
+                document.getElementById('generateBtn').disabled = false;
+                
+                appendToConsole('Async işlem durduruldu', 'error');
+            }
+        });
+
+        // Thread
+        document.getElementById('startThreadBtn').addEventListener('click', async () => {
+            const response = await fetch('/start_thread_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                document.getElementById('processConsoles').style.display = 'none';
+                document.getElementById('asyncConsoles').style.display = 'none';
+                
+                document.getElementById('threadGrid').innerHTML = '';
+                document.getElementById('threadConsoles').style.display = 'block';
+                
+                isThreadRunning = true;
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('startMultiBtn').disabled = true;
+                document.getElementById('startAsyncBtn').disabled = true;
+                document.getElementById('startThreadBtn').disabled = true;
+                document.getElementById('stopThreadBtn').disabled = false;
+                document.getElementById('generateBtn').disabled = true;
+                
+                createThreadConsoles(12);
+                pollThreadProgress();
+            }
+        });
+
+        document.getElementById('stopThreadBtn').addEventListener('click', async () => {
+            const response = await fetch('/stop_thread_crack', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                isThreadRunning = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('startMultiBtn').disabled = false;
+                document.getElementById('startAsyncBtn').disabled = false;
+                document.getElementById('startThreadBtn').disabled = false;
+                document.getElementById('stopThreadBtn').disabled = true;
+                document.getElementById('generateBtn').disabled = false;
+                
+                appendToConsole('Thread işlemi durduruldu', 'error');
+            }
+        });
     </script>
 </body>
 </html> 
