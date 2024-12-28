@@ -255,4 +255,4 @@ def get_multi_progress():
     return jsonify(messages)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
