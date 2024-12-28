@@ -70,9 +70,10 @@
             padding: 10px;
             border-radius: 4px;
             height: 150px;
-            overflow-y: auto;
             font-family: monospace;
             font-size: 12px;
+            display: flex;
+            flex-direction: column;
         }
         
         .process-title {
@@ -81,13 +82,11 @@
             margin: -10px -10px 5px -10px;
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
+            flex-shrink: 0;
         }
         
         .progress-bar {
-            background-color: #2d2d2d;
-            height: 10px;
-            border-radius: 5px;
-            margin: 5px 0;
+            flex-shrink: 0;
         }
         
         .progress-fill {
@@ -119,6 +118,13 @@
             0% { color: #4caf50; }
             50% { color: #fff; }
             100% { color: #4caf50; }
+        }
+        
+        .messages {
+            height: 100px;
+            overflow-y: auto;
+            word-wrap: break-word;
+            scroll-behavior: smooth;
         }
     </style>
 </head>
@@ -258,7 +264,9 @@
                 messageDiv.classList.add('success', 'highlight');
             }
             
+            messagesDiv.innerHTML = '';
             messagesDiv.appendChild(messageDiv);
+            
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             
             if (progress !== null) {
@@ -272,13 +280,15 @@
             const data = await response.json();
             
             if (data.status === 'success') {
+                document.getElementById('consoleGrid').innerHTML = '';
+                
                 isMultiRunning = true;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('startMultiBtn').disabled = true;
                 document.getElementById('stopMultiBtn').disabled = false;
                 document.getElementById('generateBtn').disabled = true;
                 
-                createProcessConsoles(navigator.hardwareConcurrency);
+                createProcessConsoles(8);
                 pollMultiProgress();
             }
         });
@@ -293,6 +303,12 @@
                 document.getElementById('startMultiBtn').disabled = false;
                 document.getElementById('stopMultiBtn').disabled = true;
                 document.getElementById('generateBtn').disabled = false;
+                
+                setTimeout(() => {
+                    document.getElementById('processConsoles').style.display = 'none';
+                    document.getElementById('consoleGrid').innerHTML = '';
+                }, 1000);
+                
                 appendToConsole('Multi-Process işlem durduruldu', 'error');
             }
         });
@@ -315,20 +331,40 @@
                         
                         if (msg.type === 'success' && msg.processId !== undefined) {
                             updateProcessConsole(msg.processId, msg.message);
-                        }
-                        
-                        if (msg.type === 'success') {
                             isMultiRunning = false;
                             document.getElementById('startBtn').disabled = false;
                             document.getElementById('startMultiBtn').disabled = false;
                             document.getElementById('stopMultiBtn').disabled = true;
                             document.getElementById('generateBtn').disabled = false;
+                            
+                            setTimeout(() => {
+                                document.getElementById('processConsoles').style.display = 'none';
+                                document.getElementById('consoleGrid').innerHTML = '';
+                            }, 2000);
                         }
                     }
                 }
                 
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
+        }
+
+        function updateTerminals(messages) {
+            messages.forEach(message => {
+                if (message.type === 'progress' && message.processId !== undefined) {
+                    // Process terminallerini güncelle
+                    const terminalId = `terminal${message.processId}`;
+                    const terminal = document.getElementById(terminalId);
+                    if (terminal) {
+                        terminal.innerHTML += message.message + '\n';
+                        terminal.scrollTop = terminal.scrollHeight; // Otomatik scroll
+                    }
+                } else {
+                    // Ana terminali güncelle
+                    mainTerminal.innerHTML += message.message + '\n';
+                    mainTerminal.scrollTop = mainTerminal.scrollHeight; // Otomatik scroll
+                }
+            });
         }
     </script>
 </body>
