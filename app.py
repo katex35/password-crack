@@ -33,12 +33,12 @@ multi_should_stop = Value('b', False)
 
 # Şifre uzunluk ayarları
 MIN_PASSWORD_LENGTH = 1  # Minimum şifre uzunluğu
-MAX_PASSWORD_LENGTH = 5  # Maximum şifre uzunluğu
+MAX_PASSWORD_LENGTH = 6  # Maximum şifre uzunluğu
 
 def generate_password():
     """Rastgele şifre oluştur"""
     # Her çağrıldığında yeni bir uzunluk belirle
-    password_length = random.randint(4, 5)
+    password_length = random.randint(4, 6)
     
     password = "".join(
         random.choices(string.ascii_letters + string.digits, k=password_length)
@@ -87,10 +87,17 @@ async def async_worker(chunk_id, characters, length, start, end, target_hash):
         if len(password_batch) >= batch_size or i == end - 1:
             result = await check_hash_batch(password_batch, target_hash)
             if result:
+                # Şifre bulunduğunda son ilerleme durumunu gönder
+                async_progress_queue.put({
+                    'message': f"Worker {chunk_id}: %100 - Şifre bulundu: {result}",
+                    'type': 'progress',
+                    'workerId': chunk_id,
+                    'progress': 100
+                })
                 return result
                 
             # İlerleme raporu
-            progress = (tried * 100) // total
+            progress = min((tried * 100) // total, 100)  # 100'ü geçmemesini sağla
             async_progress_queue.put({
                 'message': f"Worker {chunk_id}: %{progress} - Son denenen: {password}",
                 'type': 'progress',
@@ -142,30 +149,37 @@ async def async_brute_force(target_hash):
             )
             tasks.append(task)
         
-        # Tüm worker'ları başlat ve bekle
-        results = await asyncio.gather(*tasks)
+        # Tüm worker'ları başlat ve ilk sonucu bekle
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         
-        # Süreyi hesapla
+        # İlk tamamlanan task'i kontrol et
+        for task in done:
+            result = task.result()
+            if result:  # Şifre bulundu
+                # Diğer çalışan task'leri iptal et
+                for t in pending:
+                    t.cancel()
+                
+                duration = time.time() - start_time
+                async_progress_queue.put({
+                    'message': f"🎯 Async çözüm şifreyi {duration:.2f} saniyede buldu: {result}!",
+                    'type': 'success',
+                    'password': result,
+                    'duration': duration
+                })
+                is_async_cracking = False
+                return
+        
+        # Kalan task'leri temizle
+        for task in pending:
+            task.cancel()
+        
         duration = time.time() - start_time
-        
-        # Sonuçları kontrol et
-        found_password = next((r for r in results if r is not None), None)
-        
-        if found_password:
-            async_progress_queue.put({
-                'message': f"🎯 Async Worker {i} şifreyi {duration:.2f} saniyede buldu: {found_password}!",
-                'type': 'success',
-                'password': found_password,
-                'duration': duration
-            })
-            is_async_cracking = False
-            break
-        else:
-            async_progress_queue.put({
-                'message': f"✨ {length} karakterli kombinasyonlar denendi ({duration:.2f} saniye)",
-                'type': 'info',
-                'duration': duration
-            })
+        async_progress_queue.put({
+            'message': f"✨ {length} karakterli kombinasyonlar denendi ({duration:.2f} saniye)",
+            'type': 'info',
+            'duration': duration
+        })
 
 # ===== YARDIMCI FONKSİYONLAR =====
 def calculate_combinations(length):
@@ -261,6 +275,7 @@ def process_chunk_new(process_id, target_hash, length, start, end, progress_queu
         last_password = password_batch[-1]
         
         for i, h in enumerate(hash_batch):
+            
             if h == target_hash:
                 found_password = password_batch[i]
                 end_time = time.time()  # Bitiş zamanını kaydet
