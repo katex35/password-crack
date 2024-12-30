@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MD5 Brute Force</title>
     
-    <!-- ===== STYLES ===== -->
     <style>
-        /* Genel Stiller */
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -16,7 +14,6 @@
             background-color: #f5f5f5;
         }
         
-        /* Container ve Konsol Stilleri */
         .container {
             background-color: white;
             padding: 20px;
@@ -40,7 +37,6 @@
             margin: 10px 0;
         }
         
-        /* Buton Stilleri */
         button {
             background-color: #4caf50;
             color: white;
@@ -55,7 +51,6 @@
             cursor: not-allowed;
         }
         
-        /* Process/Worker/Thread Konsol Stilleri */
         .process-consoles {
             margin: 20px 0;
         }
@@ -100,7 +95,6 @@
             transition: width 0.3s ease;
         }
         
-        /* Animasyon ve Efekt Stilleri */
         .process-console.found {
             animation: highlight 1s infinite;
         }
@@ -137,7 +131,6 @@
             }
         }
         
-        /* Çözüm Tipine Özel Buton Renkleri */
         #startMultiBtn { background-color: #2196f3; }
         #stopMultiBtn { background-color: #1976d2; }
         
@@ -147,48 +140,38 @@
         #startThreadBtn { background-color: #ff9800; }
         #stopThreadBtn { background-color: #f57c00; }
         
-        /* Çözüm Tipine Özel Konsol Stilleri */
         .worker-console { background-color: #1a1a1a; }
         .thread-console { background-color: #1c1c1c; }
     </style>
 </head>
 <body>
-    <!-- ===== HTML YAPISI ===== -->
     <div class="container">
         <h1>MD5 Brute Force</h1>
         
-        <!-- Kontrol Butonları -->
         <div class="controls">
             <button id="generateBtn">Yeni Şifre Oluştur</button>
             
-            <!-- Normal Brute Force -->
             <button id="startBtn" disabled>Brute Force Başlat</button>
             <button id="stopBtn" disabled>Durdur</button>
             
-            <!-- Multi-Process -->
             <button id="startMultiBtn" disabled>Multi-Process Başlat</button>
             <button id="stopMultiBtn" disabled>Multi-Process Durdur</button>
             
-            <!-- Async -->
             <button id="startAsyncBtn" disabled>Async Başlat</button>
             <button id="stopAsyncBtn" disabled>Async Durdur</button>
             
-            <!-- Thread -->
             <button id="startThreadBtn" disabled>Thread Başlat</button>
             <button id="stopThreadBtn" disabled>Thread Durdur</button>
         </div>
         
-        <!-- Şifre Bilgileri -->
         <div id="passwordInfo" class="password-info" style="display: none;">
             <h3>Oluşturulan Şifre:</h3>
             <p><strong>Hash:</strong> <span id="hash"></span></p>
             <p><strong>Gerçek Şifre:</strong> <span id="realPassword"></span></p>
         </div>
         
-        <!-- Ana Konsol -->
         <div class="console" id="console"></div>
         
-        <!-- Çözüm Konsolları -->
         <div id="processConsoles" class="process-consoles" style="display: none;">
             <h3>Process İlerlemeleri</h3>
             <div class="console-grid" id="consoleGrid"></div>
@@ -205,16 +188,13 @@
         </div>
     </div>
 
-    <!-- ===== SCRIPTS ===== -->
     <script>
-        // ===== GLOBAL DEĞİŞKENLER =====
         const consoleDiv = document.getElementById('console');
         let isRunning = false;
         let isMultiRunning = false;
         let isAsyncRunning = false;
         let isThreadRunning = false;
         
-        // ===== YARDIMCI FONKSİYONLAR =====
         function appendToConsole(message, type = 'info') {
             const line = document.createElement('div');
             line.className = type;
@@ -223,7 +203,6 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
         
-        // ===== KONSOL OLUŞTURMA FONKSİYONLARI =====
         function createProcessConsoles(numProcesses) {
             const grid = document.getElementById('consoleGrid');
             grid.innerHTML = '';
@@ -289,7 +268,6 @@
             document.getElementById('threadConsoles').style.display = 'block';
         }
         
-        // ===== KONSOL GÜNCELLEME FONKSİYONLARI =====
         function updateProcessConsole(processId, message, progress = null) {
             const messagesDiv = document.getElementById(`messages-${processId}`);
             const messageDiv = document.createElement('div');
@@ -342,6 +320,10 @@
                 const threadConsole = document.getElementById(`thread-${threadId}`);
                 threadConsole.classList.add('found');
                 messageDiv.classList.add('success', 'highlight');
+                
+                const titleDiv = threadConsole.querySelector('.process-title');
+                titleDiv.style.backgroundColor = '#4caf50';  // Yeşil arka plan
+                titleDiv.textContent = `Thread ${threadId} - Şifreyi Bulan!`;
             }
             
             messagesDiv.innerHTML = '';
@@ -354,7 +336,6 @@
             }
         }
         
-        // ===== POLLING FONKSİYONLARI =====
         async function pollProgress() {
             while (isRunning) {
                 const response = await fetch('/get_progress');
@@ -491,8 +472,6 @@
             }
         }
         
-        // ===== EVENT LISTENERS =====
-        // Şifre Oluşturma
         document.getElementById('generateBtn').addEventListener('click', async () => {
             const response = await fetch('/get_password');
             const data = await response.json();
@@ -524,7 +503,6 @@
             appendToConsole('Yeni şifre oluşturuldu', 'info');
         });
 
-        // Normal Brute Force
         document.getElementById('startBtn').addEventListener('click', async () => {
             const response = await fetch('/start_crack', { method: 'POST' });
             const data = await response.json();
@@ -555,7 +533,6 @@
             }
         });
 
-        // Multi-Process
         document.getElementById('startMultiBtn').addEventListener('click', async () => {
             const response = await fetch('/start_multi_crack', { method: 'POST' });
             const data = await response.json();
@@ -593,7 +570,6 @@
             }
         });
 
-        // Async
         document.getElementById('startAsyncBtn').addEventListener('click', async () => {
             const response = await fetch('/start_async_crack', { method: 'POST' });
             const data = await response.json();
@@ -633,7 +609,6 @@
             }
         });
 
-        // Thread
         document.getElementById('startThreadBtn').addEventListener('click', async () => {
             const response = await fetch('/start_thread_crack', { method: 'POST' });
             const data = await response.json();

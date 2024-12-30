@@ -2,59 +2,116 @@ from flask import Flask, request, jsonify, render_template
 import hashlib
 import random
 import string
-from threading import Thread
-import queue
 import time
 import itertools
-import os
-from multiprocessing import Value
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from threading import Thread, Lock
+from multiprocessing import Process, Queue as MultiQueue, Value, cpu_count
 
 app = Flask(__name__)
 
-# Vercel için multiprocessing desteğini kontrol et
-IS_VERCEL = os.environ.get('VERCEL')
-
-if IS_VERCEL:
-    from threading import Thread as Process
-    from queue import Queue as MultiQueue
-    cpu_count = lambda: 4
-else:
-    from multiprocessing import Process, Queue as MultiQueue, cpu_count
-
 # ===== GLOBAL DEĞİŞKENLER =====
-progress_queue = queue.Queue()
+# Normal Brute Force için
+progress_queue = MultiQueue()
 current_password = None
 is_cracking = False
+
+# Multi-Process için
 multi_progress_queue = MultiQueue()
 multi_should_stop = Value('b', False)
 
-# Şifre uzunluk ayarları
-MIN_PASSWORD_LENGTH = 1  # Minimum şifre uzunluğu
-MAX_PASSWORD_LENGTH = 6  # Maximum şifre uzunluğu
+# Thread için
+thread_progress_queue = MultiQueue()
+is_thread_cracking = False
+thread_lock = Lock()
+active_threads = []
+
+# ===== ASYNC ÇÖZÜMÜ =====
+async_progress_queue = MultiQueue()
+is_async_cracking = False
+
+# Şifre Ayarları
+MIN_PASSWORD_LENGTH = 1
+MAX_PASSWORD_LENGTH = 5
 
 def generate_password():
     """Rastgele şifre oluştur"""
     # Her çağrıldığında yeni bir uzunluk belirle
-    password_length = random.randint(4, 6)
+    password_length = random.randint(4, 5)
     
     password = "".join(
         random.choices(string.ascii_letters + string.digits, k=password_length)
     )
     return hashlib.md5(password.encode()).hexdigest(), password, password_length
 
+
+# ===== YARDIMCI FONKSİYONLAR =====
+def calculate_combinations(length):
+    characters = string.ascii_letters + string.digits
+    return len(characters) ** length
+
+def get_chunk_range(total_combinations, chunk_id, num_chunks):
+    chunk_size = total_combinations // num_chunks
+    start = chunk_id * chunk_size
+    end = start + chunk_size if chunk_id < num_chunks - 1 else total_combinations
+    return start, end
+
+# ===== NORMAL BRUTE FORCE ÇÖZÜMÜ =====
+def brute_force_md5(target_hash):
+    global is_cracking
+    is_cracking = True
+    characters = string.ascii_letters + string.digits
+    total_attempts = 0
+    start_time = time.time()
+    
+    for length in range(MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH + 1):
+        length_start_time = time.time()  # Her uzunluk için başlangıç zamanı
+        
+        progress_queue.put({
+            'message': f"\n{length} karakterli şifreler deneniyor...",
+            'type': 'info'
+        })
+        combinations_for_length = 0
+        
+        for combination in itertools.product(characters, repeat=length):
+            if not is_cracking:
+                return None
+                
+            total_attempts += 1
+            combinations_for_length += 1
+            candidate = ''.join(combination)
+            candidate_hash = hashlib.md5(candidate.encode()).hexdigest()
+            
+            if combinations_for_length % (100 if length <= 2 else 10000) == 0:
+                progress_queue.put({
+                    'message': f"Deneme sayısı: {total_attempts:,} - Son denenen: {candidate}",
+                    'type': 'progress'
+                })
+            
+            if candidate_hash == target_hash:
+                end_time = time.time()
+                total_duration = end_time - start_time
+                progress_queue.put({
+                    'message': f"🎯 Şifre bulundu: {candidate} ({total_duration:.2f} saniyede çözüldü)",
+                    'type': 'success',
+                    'password': candidate,
+                    'attempts': total_attempts,
+                    'duration': total_duration
+                })
+                is_cracking = False
+                return candidate
+        
+        # Her uzunluk için geçen süreyi rapor et
+        length_duration = time.time() - length_start_time
+        progress_queue.put({
+            'message': f"✨ {length} karakterli {combinations_for_length:,} kombinasyon denendi ({length_duration:.2f} saniye)",
+            'type': 'info'
+        })
+    
+    is_cracking = False
+    return None
+
 # ===== ASYNC ÇÖZÜMÜ =====
-async_progress_queue = queue.Queue()
-is_async_cracking = False
-
-# ===== THREAD ÇÖZÜMÜ =====
-thread_progress_queue = queue.Queue()
-is_thread_cracking = False
-thread_lock = Lock()
-active_threads = []
-
 async def check_hash_batch(password_batch, target_hash):
     """Şifre batch'ini asenkron olarak kontrol et"""
     for password in password_batch:
@@ -181,67 +238,6 @@ async def async_brute_force(target_hash):
             'duration': duration
         })
 
-# ===== YARDIMCI FONKSİYONLAR =====
-def calculate_combinations(length):
-    characters = string.ascii_letters + string.digits
-    return len(characters) ** length
-
-def get_chunk_range(total_combinations, chunk_id, num_chunks):
-    chunk_size = total_combinations // num_chunks
-    start = chunk_id * chunk_size
-    end = start + chunk_size if chunk_id < num_chunks - 1 else total_combinations
-    return start, end
-
-# ===== NORMAL BRUTE FORCE ÇÖZÜMÜ =====
-def brute_force_md5(target_hash):
-    global is_cracking
-    is_cracking = True
-    characters = string.ascii_letters + string.digits
-    total_attempts = 0
-    start_time = time.time()
-    
-    for length in range(MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH + 1):
-        progress_queue.put({
-            'message': f"\n{length} karakterli şifreler deneniyor...",
-            'type': 'info'
-        })
-        combinations_for_length = 0
-        
-        for combination in itertools.product(characters, repeat=length):
-            if not is_cracking:
-                return None
-                
-            total_attempts += 1
-            combinations_for_length += 1
-            candidate = ''.join(combination)
-            candidate_hash = hashlib.md5(candidate.encode()).hexdigest()
-            
-            if combinations_for_length % (100 if length <= 2 else 10000) == 0:
-                progress_queue.put({
-                    'message': f"Deneme sayısı: {total_attempts:,} - Son denenen: {candidate}",
-                    'type': 'progress'
-                })
-            
-            if candidate_hash == target_hash:
-                end_time = time.time()
-                progress_queue.put({
-                    'message': f"Şifre bulundu: {candidate}",
-                    'type': 'success',
-                    'password': candidate,
-                    'attempts': total_attempts,
-                    'time': end_time - start_time
-                })
-                is_cracking = False
-                return candidate
-        
-        progress_queue.put({
-            'message': f"{length} karakter için toplam {combinations_for_length:,} kombinasyon denendi",
-            'type': 'info'
-        })
-    
-    is_cracking = False
-    return None
-
 # ===== MULTI-PROCESS ÇÖZÜMÜ =====
 def generate_passwords_in_range(start, end, length):
     characters = string.ascii_letters + string.digits
@@ -275,7 +271,7 @@ def process_chunk_new(process_id, target_hash, length, start, end, progress_queu
         last_password = password_batch[-1]
         
         for i, h in enumerate(hash_batch):
-            
+
             if h == target_hash:
                 found_password = password_batch[i]
                 end_time = time.time()  # Bitiş zamanını kaydet
@@ -299,7 +295,7 @@ def process_chunk_new(process_id, target_hash, length, start, end, progress_queu
         
         tried += len(password_batch)
         
-        if tried % 10000 == 0:
+        if tried % 1000 == 0:
             progress = (tried * 100) // total_for_this_chunk
             progress_queue.put({
                 'message': f"Process {process_id}: %{progress} - Son denenen: {last_password}",
@@ -412,12 +408,23 @@ def thread_worker(thread_id, characters, length, start, end, target_hash):
                 for pwd in current_batch:
                     if hashlib.md5(pwd.encode()).hexdigest() == target_hash:
                         duration = time.time() - start_time
+                        
+                        # Önce başarılı thread'in son denediği şifreyi gönder
+                        thread_progress_queue.put({
+                            'message': f"Thread {thread_id}: %100 - Şifre bulundu: {pwd}",
+                            'type': 'progress',
+                            'threadId': thread_id,
+                            'progress': 100
+                        })
+                        
+                        # Sonra başarı mesajını gönder
                         thread_progress_queue.put({
                             'message': f"🎯 Thread {thread_id} şifreyi {duration:.2f} saniyede buldu: {pwd}!",
                             'type': 'success',
                             'threadId': thread_id,
                             'password': pwd,
-                            'duration': duration
+                            'duration': duration,
+                            'foundBy': thread_id  # Hangi thread bulduğunu belirt
                         })
                         is_thread_cracking = False
                         return pwd
@@ -521,27 +528,6 @@ def get_thread_progress():
         messages.append(thread_progress_queue.get())
     return jsonify(messages)
 
-# ===== FLASK ROUTE'LARI (ENDPOINTS) =====
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route("/get_password", methods=["GET"])
-def get_password():
-    global current_password
-    hashed_password, real_password, length = generate_password()
-    current_password = {
-        "hash": hashed_password,
-        "real": real_password,
-        "length": length  # Dinamik uzunluğu kullan
-    }
-    return jsonify({
-        "password": hashed_password,
-        "real_password": real_password,
-        "length": length,
-        "min_length": MIN_PASSWORD_LENGTH,
-        "max_length": MAX_PASSWORD_LENGTH
-    })
 
 # Normal Brute Force Endpoints
 @app.route("/start_crack", methods=["POST"])
@@ -645,6 +631,29 @@ def get_async_progress():
     while not async_progress_queue.empty():
         messages.append(async_progress_queue.get())
     return jsonify(messages)
+
+
+# ===== FLASK ROUTE'LARI (ENDPOINTS) =====
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route("/get_password", methods=["GET"])
+def get_password():
+    global current_password
+    hashed_password, real_password, length = generate_password()
+    current_password = {
+        "hash": hashed_password,
+        "real": real_password,
+        "length": length  # Dinamik uzunluğu kullan
+    }
+    return jsonify({
+        "password": hashed_password,
+        "real_password": real_password,
+        "length": length,
+        "min_length": MIN_PASSWORD_LENGTH,
+        "max_length": MAX_PASSWORD_LENGTH
+    })
 
 if __name__ == "__main__":
     app.run()
