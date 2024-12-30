@@ -11,3 +11,4 @@ zeki.py
 password.json
 async_cracker.py
 process_cracker.py
+.DS_Store
