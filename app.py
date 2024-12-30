@@ -26,17 +26,15 @@ is_thread_cracking = False
 thread_lock = Lock()
 active_threads = []
 
-# ===== ASYNC ÇÖZÜMÜ =====
+# Async için
 async_progress_queue = MultiQueue()
 is_async_cracking = False
 
-# Şifre Ayarları
 MIN_PASSWORD_LENGTH = 1
 MAX_PASSWORD_LENGTH = 5
 
 def generate_password():
     """Rastgele şifre oluştur"""
-    # Her çağrıldığında yeni bir uzunluk belirle
     password_length = random.randint(4, 5)
     
     password = "".join(
@@ -56,7 +54,6 @@ def get_chunk_range(total_combinations, chunk_id, num_chunks):
     end = start + chunk_size if chunk_id < num_chunks - 1 else total_combinations
     return start, end
 
-# ===== NORMAL BRUTE FORCE ÇÖZÜMÜ =====
 def brute_force_md5(target_hash):
     global is_cracking
     is_cracking = True
@@ -65,7 +62,7 @@ def brute_force_md5(target_hash):
     start_time = time.time()
     
     for length in range(MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH + 1):
-        length_start_time = time.time()  # Her uzunluk için başlangıç zamanı
+        length_start_time = time.time() 
         
         progress_queue.put({
             'message': f"\n{length} karakterli şifreler deneniyor...",
@@ -101,7 +98,6 @@ def brute_force_md5(target_hash):
                 is_cracking = False
                 return candidate
         
-        # Her uzunluk için geçen süreyi rapor et
         length_duration = time.time() - length_start_time
         progress_queue.put({
             'message': f"✨ {length} karakterli {combinations_for_length:,} kombinasyon denendi ({length_duration:.2f} saniye)",
@@ -130,7 +126,6 @@ async def async_worker(chunk_id, characters, length, start, end, target_hash):
         if not is_async_cracking:
             return None
             
-        # Şifre oluştur
         password = ""
         n = i
         for _ in range(length):
@@ -140,11 +135,9 @@ async def async_worker(chunk_id, characters, length, start, end, target_hash):
         password_batch.append(password)
         tried += 1
         
-        # Batch dolduğunda veya son elemana gelindiğinde kontrol et
         if len(password_batch) >= batch_size or i == end - 1:
             result = await check_hash_batch(password_batch, target_hash)
             if result:
-                # Şifre bulunduğunda son ilerleme durumunu gönder
                 async_progress_queue.put({
                     'message': f"Worker {chunk_id}: %100 - Şifre bulundu: {result}",
                     'type': 'progress',
@@ -153,8 +146,7 @@ async def async_worker(chunk_id, characters, length, start, end, target_hash):
                 })
                 return result
                 
-            # İlerleme raporu
-            progress = min((tried * 100) // total, 100)  # 100'ü geçmemesini sağla
+            progress = min((tried * 100) // total, 100) 
             async_progress_queue.put({
                 'message': f"Worker {chunk_id}: %{progress} - Son denenen: {password}",
                 'type': 'progress',
@@ -163,7 +155,6 @@ async def async_worker(chunk_id, characters, length, start, end, target_hash):
             })
             password_batch = []
             
-            # Küçük bir bekleme ekleyerek CPU kullanımını dengele
             await asyncio.sleep(0.001)
     
     return None
@@ -187,7 +178,6 @@ async def async_brute_force(target_hash):
             'type': 'info'
         })
         
-        # Worker'ları hazırla
         chunk_size = total_combinations // num_workers
         tasks = []
         
@@ -206,14 +196,11 @@ async def async_brute_force(target_hash):
             )
             tasks.append(task)
         
-        # Tüm worker'ları başlat ve ilk sonucu bekle
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         
-        # İlk tamamlanan task'i kontrol et
         for task in done:
             result = task.result()
-            if result:  # Şifre bulundu
-                # Diğer çalışan task'leri iptal et
+            if result:  
                 for t in pending:
                     t.cancel()
                 
@@ -227,7 +214,6 @@ async def async_brute_force(target_hash):
                 is_async_cracking = False
                 return
         
-        # Kalan task'leri temizle
         for task in pending:
             task.cancel()
         
@@ -261,7 +247,7 @@ def process_chunk_new(process_id, target_hash, length, start, end, progress_queu
     total_for_this_chunk = end - start
     tried = 0
     last_password = ""
-    start_time = time.time()  # Başlangıç zamanını kaydet
+    start_time = time.time()  
     
     for password_batch in generate_passwords_in_range(start, end, length):
         if should_stop.value:
@@ -274,8 +260,8 @@ def process_chunk_new(process_id, target_hash, length, start, end, progress_queu
 
             if h == target_hash:
                 found_password = password_batch[i]
-                end_time = time.time()  # Bitiş zamanını kaydet
-                duration = end_time - start_time  # Süreyi hesapla
+                end_time = time.time()  
+                duration = end_time - start_time  
                 
                 progress_queue.put({
                     'message': f"Process {process_id}: Son denenen: {found_password}",
@@ -311,7 +297,6 @@ def multi_brute_force_new(target_hash):
     global multi_should_stop
     multi_should_stop.value = False
     
-    # Sabit 12 process kullan
     num_processes = 12
     
     multi_progress_queue.put({
@@ -358,11 +343,10 @@ def multi_brute_force_new(target_hash):
         for p in processes:
             p.join()
             
-        # Süreyi hesapla
         end_time = time.time()
         duration = end_time - start_time
         
-        if multi_should_stop.value:  # Şifre bulunduysa
+        if multi_should_stop.value:  
             multi_progress_queue.put({
                 'message': f"✨ {length} karakterli kombinasyonların denenmesi {duration:.2f} saniye sürdü (Şifre bulundu!)",
                 'type': 'info',
@@ -370,7 +354,7 @@ def multi_brute_force_new(target_hash):
                 'passwordLength': length
             })
             break
-        else:  # Normal bitti (şifre bulunamadı)
+        else:  
             multi_progress_queue.put({
                 'message': f"✨ {length} karakterli kombinasyonların denenmesi {duration:.2f} saniye sürdü",
                 'type': 'info',
@@ -392,7 +376,6 @@ def thread_worker(thread_id, characters, length, start, end, target_hash):
         if not is_thread_cracking:
             return None
             
-        # Şifre oluştur
         password = ""
         n = i
         for _ in range(length):
@@ -402,14 +385,12 @@ def thread_worker(thread_id, characters, length, start, end, target_hash):
         current_batch.append(password)
         tried += 1
         
-        # Batch kontrolü
         if len(current_batch) >= batch_size or i == end - 1:
-            with thread_lock:  # Hash hesaplama sırasında kilitle
+            with thread_lock:  
                 for pwd in current_batch:
                     if hashlib.md5(pwd.encode()).hexdigest() == target_hash:
                         duration = time.time() - start_time
                         
-                        # Önce başarılı thread'in son denediği şifreyi gönder
                         thread_progress_queue.put({
                             'message': f"Thread {thread_id}: %100 - Şifre bulundu: {pwd}",
                             'type': 'progress',
@@ -417,19 +398,17 @@ def thread_worker(thread_id, characters, length, start, end, target_hash):
                             'progress': 100
                         })
                         
-                        # Sonra başarı mesajını gönder
                         thread_progress_queue.put({
                             'message': f"🎯 Thread {thread_id} şifreyi {duration:.2f} saniyede buldu: {pwd}!",
                             'type': 'success',
                             'threadId': thread_id,
                             'password': pwd,
                             'duration': duration,
-                            'foundBy': thread_id  # Hangi thread bulduğunu belirt
+                            'foundBy': thread_id  
                         })
                         is_thread_cracking = False
                         return pwd
             
-            # İlerleme raporu
             progress = (tried * 100) // total
             thread_progress_queue.put({
                 'message': f"Thread {thread_id}: %{progress} - Son denenen: {current_batch[-1]}",
@@ -453,14 +432,13 @@ def thread_brute_force(target_hash):
             
         start_time = time.time()
         total_combinations = len(characters) ** length
-        num_threads = 12  # Sabit thread sayısı
+        num_threads = 12
         
         thread_progress_queue.put({
             'message': f"\n{length} karakterli {total_combinations:,} kombinasyon {num_threads} thread'e bölünüyor",
             'type': 'info'
         })
         
-        # Thread'leri hazırla
         chunk_size = total_combinations // num_threads
         threads = []
         active_threads.clear()
@@ -483,14 +461,12 @@ def thread_brute_force(target_hash):
             active_threads.append(t)
             t.start()
         
-        # Thread'leri bekle
         for t in threads:
             t.join()
             
-        if not is_thread_cracking:  # Şifre bulunduysa
+        if not is_thread_cracking:
             break
             
-        # Süreyi hesapla ve rapor et
         duration = time.time() - start_time
         thread_progress_queue.put({
             'message': f"✨ {length} karakterli kombinasyonların denenmesi {duration:.2f} saniye sürdü",
@@ -566,14 +542,11 @@ def start_multi_crack():
     if not current_password:
         return jsonify({"status": "error", "message": "Önce şifre oluşturun"})
     
-    # Kuyruğu temizle
     while not multi_progress_queue.empty():
         multi_progress_queue.get()
     
-    # should_stop değerini sıfırla
     multi_should_stop.value = False
     
-    # Yeni thread başlat
     try:
         Thread(target=multi_brute_force_new, args=(current_password["hash"],)).start()
         return jsonify({
@@ -645,7 +618,7 @@ def get_password():
     current_password = {
         "hash": hashed_password,
         "real": real_password,
-        "length": length  # Dinamik uzunluğu kullan
+        "length": length 
     }
     return jsonify({
         "password": hashed_password,
